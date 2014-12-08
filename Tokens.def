@@ -1,0 +1,53 @@
+/*********************/
+/*** Tokens.def    ***/
+/*** List of token ***/
+/*********************/
+
+/* Start and end */
+#define tok_prog_start    "<3"
+/* The full |tok_prog_end| token is "</3"
+ * but tokens are only 2 char long, so the '3' is skipped */
+#define tok_prog_end      "</"
+
+/* Variables and inputs */
+#define tok_var_start     ":("
+#define tok_var_not_start "x("
+#define tok_var_end       ":)"
+#define tok_comment       ";)"
+#define tok_input         ":$"
+#define tok_equal         "=;"
+
+/* Print */
+#define tok_print_start   ":@"
+#define tok_print_end     "@)"
+#define tok_print_hello   ":B"
+
+/* Stack */
+#define tok_stack_push    ":P"
+#define tok_stack_pop     ":O"
+#define tok_stack_clear   ":D"
+
+/* Loop */
+#define tok_loop_start    "8|"
+#define tok_loop_then     "|)"
+#define tok_loop_thelse   "8)"
+#define tok_loop_end      "8}"
+
+/* Functions */
+#define tok_str_length    "L)"
+#define tok_exit          "#0"
+#define tok_nop           ":v" // No more ":h"
+
+/* Operators */
+#define tok_add           ":#"
+#define tok_sub           ":>"
+#define tok_mul           ":*"
+#define tok_div           ":/"
+#define tok_mod           "%)"
+#define tok_and           ":&"
+#define tok_or            ":|"
+
+/* Precedence */
+#define prec_low           10
+#define prec_normal        20
+#define prec_high          30
