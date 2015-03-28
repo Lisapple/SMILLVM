@@ -9,13 +9,11 @@
 
 #include "llvm/ExecutionEngine/ExecutionEngine.h"
 #include "llvm/ExecutionEngine/GenericValue.h"
-//#include "llvm/ExecutionEngine/Interpreter.h"
 
 #define __MCJIT__ 1 // Use MCJIT (required for LLVM 3.6+, JIT is deprecated since LLVM 3.5)
-
 #if __MCJIT__
+#  include "llvm/ExecutionEngine/SectionMemoryManager.h"
 #  include "llvm/ExecutionEngine/MCJIT.h"
-//#  include "llvm/ExecutionEngine/SectionMemoryManager.h"
 #else
 #  include "llvm/ExecutionEngine/JIT.h"
 #endif
@@ -23,13 +21,11 @@
 #include "llvm/Support/ManagedStatic.h"
 #include "llvm/Support/TargetSelect.h"
 #include "llvm/Support/raw_ostream.h"
-//#include "llvm/Support/Debug.h"
 #include "llvm/Support/Host.h"
 
 #include "llvm/Transforms/Scalar.h"
-#include "llvm/Analysis/Verifier.h"
 #include "llvm/Analysis/Passes.h"
-#include "llvm/PassManager.h"
+#include "llvm/IR/PassManager.h"
 
 #include "llvm/IR/DerivedTypes.h"
 #include "llvm/IR/LLVMContext.h"
@@ -85,10 +81,12 @@ int main(int argc, char *argv[]) {
     s += line; s += "\n";
   }
   Parser p(s);
-  
-  LLVMContext C;
-  Module *M = new Module("test", C);
-  
+	
+  LLVMContext &C = getGlobalContext();
+  ErrorOr<Module *> ModuleOrErr = new Module("test", C);
+  std::unique_ptr<Module> Owner = std::unique_ptr<Module>(ModuleOrErr.get());
+  Module *M = Owner.get();
+	
   // i32 @main(i32 %argc, i8** %argv)
   Function *MainF = cast<Function>(M->getOrInsertFunction("main", Type::getInt32Ty(C),
                                                           Type::getInt32Ty(C),
@@ -196,9 +194,11 @@ int main(int argc, char *argv[]) {
 #endif
   
 #if __MCJIT__
-  //RTDyldMemoryManager *MManager = (RTDyldMemoryManager *)new SectionMemoryManager();
-  //ExecutionEngine *EE = EB.setUseMCJIT(true).setMCJITMemoryManager(MManager).create();
-  ExecutionEngine *EE = EngineBuilder(M).setUseMCJIT(true).create();
+  std::string ErrStr;
+  EngineBuilder *EB = new EngineBuilder(std::move(Owner));
+  ExecutionEngine *EE = EB->setErrorStr(&ErrStr)
+    .setMCJITMemoryManager(std::unique_ptr<SectionMemoryManager>(new SectionMemoryManager()))
+    .create();
 #else
   EngineBuilder EB = EngineBuilder(M);
   ExecutionEngine *EE = EB.create();
@@ -208,39 +208,12 @@ int main(int argc, char *argv[]) {
   const DataLayout *DL = EE->getDataLayout();
   M->setDataLayout(DL->getStringRepresentation());
   
-  FunctionPassManager *FPM = new FunctionPassManager(M);
-  // Set up the optimizer pipeline.  Start with registering info about how the
-  // target lays out data structures.
-  FPM->add(new DataLayout(*DL));
-  // Provide basic AliasAnalysis support for GVN.
-  FPM->add(createBasicAliasAnalysisPass());
-  // Do simple "peephole" optimizations and bit-twiddling optzns.
-  FPM->add(createInstructionCombiningPass());
-  // Promote allocas to registers.
-  FPM->add(createPromoteMemoryToRegisterPass());
-  // ???
-  FPM->add(createScalarReplAggregatesPass());
-  // Reassociate expressions.
-  FPM->add(createReassociatePass());
-  // Eliminate Common SubExpressions.
-  FPM->add(createGVNPass());
-  // Simplify the control flow graph (deleting unreachable blocks, etc).
-  FPM->add(createCFGSimplificationPass());
-  // Init the optimization
-  FPM->doInitialization();
-  
-  // Run the optimization for each function in the module
-  for (Module::iterator it = M->begin(); it != M->end(); ++it) {
-    FPM->run(*it);
-  }
-  // @TODO: Should put "delete FPM;" somewhere
-  
-  // Print the module to stdin ( http://www.llvm.org/docs/ProgrammersManual.html#the-debug-macro-and-debug-option )
-  //DEBUG(std::cout << "\n" << "=== IR Dump ===" << "\n");
+  ModulePassManager *MPM = new ModulePassManager();
+  MPM->run(*M);
+	
   out() << "\n" << "=== IR Dump ===" << "\n";
-  //DEBUG(outs() << *M << "\n");
   if (verbose) {
-    outs() << *M << "\n";
+    M->dump();
   }
   
 #if __MCJIT__
@@ -254,11 +227,9 @@ int main(int argc, char *argv[]) {
   
   out() << "\n" << "=== Program Output ===" << "\n";
   GenericValue gv = EE->runFunction(MainF, Args);
-  
-  EE->freeMachineCodeForFunction(MainF);
+	
+  // Clean up and shutdown
   delete EE;
-  
-  // Shutdown
   llvm_shutdown();
   
   return 0;

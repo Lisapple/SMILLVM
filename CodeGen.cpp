@@ -26,7 +26,7 @@ Value * TokenExpr::CodeGen(Module *M, IRBuilder<> &B)
 /*** Comment Expression ***/
 Value * CommentExpr::CodeGen(Module *M, IRBuilder<> &B)
 {
-	// Nothing to do (since comments can't be added into IR)
+  // Nothing to do (since comments can't be added into IR)
   return NULL;
 }
 

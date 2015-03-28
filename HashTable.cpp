@@ -529,9 +529,8 @@ Value * GetPtrOrInsert(Value *Key, Module *M, IRBuilder<> &B)
     BasicBlock *InsertBB = BasicBlock::Create(C, "InsertBlock", GetOrCrF);
     
     // (|ValPtr| != NULL) ? (br GetPtrBlock) : (br InsertBlock)
-    Value *ICmpSGT = GCB.CreateICmpSGT(GCB.CreatePtrToInt(ValPtr, Type::getInt32Ty(C)),
-                                    GCB.getInt32(0));
-    GCB.CreateCondBr(ICmpSGT, GetPtrBB, InsertBB);
+    Value *IsNotNull = GCB.CreateIsNotNull(ValPtr);
+    GCB.CreateCondBr(IsNotNull, GetPtrBB, InsertBB);
     
     /* Get Pointer block */
     IRBuilder<> GPB(GetPtrBB);

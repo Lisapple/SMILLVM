@@ -22,11 +22,6 @@ void CreateInvalidBinopAssertion(Module *M, IRBuilder<> &B, int line, int col, b
                M, B, line, col);
 }
 
-/* Module *M = [...]; IRBuilder<> B = [...]; Value *CondV = [...];
- * CreateAssert(CondV,
- *              B.CreateGlobalString("this should be true", "SMILTrueAssertMessage"),
- *              M, B, 123, 34);
- */
 void CreateAssert(Value *CondV, Value *ErrMsgV, Module *M, IRBuilder<> &B, int line, int col, bool shouldExit)
 {
   LLVMContext &C = M->getContext();
@@ -97,16 +92,6 @@ void CreateWarning(Value *WarningMsgV, Module *M, IRBuilder<> &B, int line, int 
   }
 }
 
-/*
- * Call "IRBuilder::CreateMemCpy()" but remove the "readonly" attribute
- *   for the second argument (src), clang don't like it when creating a.out (tested on 3.3)
- *   ("error: invalid use of function-only attribute: readonly")
- *                                                    ^
- * The default declaration:
- *   void @llvm.memcpy.xxx(i8* nocapture, i8* nocapture readonly, i64, i32, i1)
- * becomes this one:
- *   void @llvm.memcpy.xxx(i8* nocapture, i8* nocapture , i64, i32, i1)
- */
 void MemCpy(Value *DestV, Value *SrcV, Value *Size, Module *M, IRBuilder<> &B, unsigned align)
 {
   LLVMContext &C = M->getContext();
