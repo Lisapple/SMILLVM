@@ -3,7 +3,7 @@ SMILLVM
 
 LLVM implementation of the [SMIL language](http://smil.lisacintosh.com) compiler.
 
-Required LLVM 3.6.
+Require LLVM 3.6
 
 <pre>
 $ make build
