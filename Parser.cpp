@@ -48,19 +48,21 @@ Expr /* VarExpr or NamedVarExpr */ * Parser::parseVar(int inversed)
 {
   string name;
   Token tok;
-  while ( (tok = gettok()) ) {
+  while ( (tok = nexttok()) ) {
     
     if (tok == tok_var_end) { // End of the variable
+      gettok(); // Eat var end token
       break;
       
     } else if (tok == tok_var_start && name.length() == 0) { // Named variable, like `:( :( :$ :) :)'
+      gettok(); // Eat var begin token
       Expr *expr = parseVar();
       Token tok = gettok(); // Eat the |tok_var_end| after the variable
       // @TODO: Check that |tok| is |tok_var_end|
       return new NamedVarExpr(expr, line, col);
       
     } else { // Appends symbol to |name|
-      name += tok;
+      name += input_str[input_str_index++];
     }
   }
   
