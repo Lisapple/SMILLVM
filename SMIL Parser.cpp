@@ -139,7 +139,7 @@ int main(int argc, char *argv[]) {
   Function *StrcatF = cast<Function>(M->getOrInsertFunction("strcat", StrcatTy));
   
   // Concat ":$" (input) to |InputName|
-  B.CreateCall2(StrcatF, InputName, InputToken);
+  B.CreateCall(StrcatF, ArrayRef<Value *>{ InputName, InputToken });
   
   /* Loop block */
   BasicBlock *LoopBB = BasicBlock::Create(C, "LoopBlock", MainF);
@@ -165,7 +165,7 @@ int main(int argc, char *argv[]) {
                     CounterPtr);
   
   // Concat ":$" (input) to |InputName|
-  LoopB.CreateCall2(StrcatF, InputName, InputToken);
+  LoopB.CreateCall(StrcatF, ArrayRef<Value *>{ InputName, InputToken });
   
   // Loop until |Counter| >= |argc|
   BasicBlock *DoneBB = BasicBlock::Create(C, "DoneBlock", MainF);

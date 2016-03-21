@@ -76,8 +76,7 @@ Value *Hash(Value *Str, Module *M, IRBuilder<> &B)
   }
   
   // Call hash function
-  return B.CreateCall(HashF,
-                      CastToCStr(Str, B));
+  return B.CreateCall(HashF, CastToCStr(Str, B));
 }
 
 StructType * BucketType(LLVMContext &C)
@@ -106,7 +105,7 @@ GlobalVariable * InitVarTable(Module *M)
     Constant *NullPtr = ConstantPointerNull::get(Type::getInt8PtrTy(C)->getPointerTo()); // %i8**
     Constant *NullObjPtr = ConstantPointerNull::get(getObjPtrTy(C)->getPointerTo()); // %obj**
     constants.push_back(ConstantStruct::get(BucketType(C),
-                                            (Constant *[]) { NullPtr, NullObjPtr, Zero, Zero }));
+                                            ArrayRef<Constant *>{ NullPtr, NullObjPtr, Zero, Zero }));
   }
   ArrayRef<Constant *> Constants = ArrayRef<Constant *>(constants);
   Constant *InitPtr = ConstantArray::get(Ty, Constants);
@@ -151,7 +150,7 @@ void Upsize(Value *BucketPtr, Module *M, IRBuilder<> &B)
     UpB.SetInsertPoint(UpBB);
     
     // arr->max_size += kArrayBaseSize;
-    Value *MaxSizePtr = UpB.CreateStructGEP(BArg, BucketFieldMaxSize);
+    Value *MaxSizePtr = UpB.CreateStructGEP(BucketType(C), BArg, BucketFieldMaxSize);
     Value *Add = UpB.CreateAdd(UpB.CreateLoad(MaxSizePtr),
                                UpB.getInt32(kBucketDefaultSize));
     UpB.CreateStore(Add, MaxSizePtr);
@@ -170,29 +169,33 @@ void Upsize(Value *BucketPtr, Module *M, IRBuilder<> &B)
     // arr->keys = new_keys;
     Value * AllocSize = UpB.CreateMul(UpB.getInt64(8 /* sizeof(char *) */),
                                       UpB.CreateIntCast(NewSize, Type::getInt64Ty(C), false));
-    Value *KeysPtr = UpB.CreateStructGEP(BArg, BucketFieldKeys); // |KeysPtr| : i8***
+    Value *KeysPtr = UpB.CreateStructGEP(BucketType(C), BArg, BucketFieldKeys); // |KeysPtr| : i8***
     
-    // |NewKeysPtr| : [|NewSize| x i8*] = i8**
-    Value * NewKeysPtr = UpB.CreateCall2(ReallocF,
-                                         UpB.CreatePointerCast(UpB.CreateLoad(KeysPtr),
-                                                               Type::getInt8PtrTy(C)),
-                                         AllocSize);
-    UpB.CreateStore(UpB.CreatePointerCast(NewKeysPtr, Type::getInt8PtrTy(C)->getPointerTo()),
-                    KeysPtr);
+    {
+      // |NewKeysPtr| : [|NewSize| x i8*] = i8**
+      Value* ReallocArgs[] = {
+        UpB.CreatePointerCast(UpB.CreateLoad(KeysPtr), Type::getInt8PtrTy(C)), AllocSize };
+      
+      Value * NewKeysPtr = UpB.CreateCall(ReallocF, ReallocArgs);
+      UpB.CreateStore(UpB.CreatePointerCast(NewKeysPtr, Type::getInt8PtrTy(C)->getPointerTo()),
+                      KeysPtr);
+    }
     
     // obj * new_values = (obj *)malloc(new_size);
     // memcpy(new_values, arr->values, size);
     // arr->values = new_values;
-    Value *ValuesPtr = UpB.CreateStructGEP(BArg, BucketFieldValues); // |ValuesPtr| : %obj***
+    Value *ValuesPtr = UpB.CreateStructGEP(BucketType(C), BArg, BucketFieldValues); // |ValuesPtr| : %obj***
     
-    // |NewKeysPtr| : [|NewSize| x %obj*] = %obj**
-    Value * NewValuesPtr = UpB.CreateCall2(ReallocF,
-                                           UpB.CreatePointerCast(UpB.CreateLoad(ValuesPtr),
-                                                                 Type::getInt8PtrTy(C)),
-                                           AllocSize);
-    UpB.CreateStore(UpB.CreatePointerCast(NewValuesPtr, getObjPtrTy(C)->getPointerTo()),
-                    ValuesPtr);
-    
+    {
+      // |NewKeysPtr| : [|NewSize| x %obj*] = %obj**
+      Value* ReallocArgs[] = {
+        UpB.CreatePointerCast(UpB.CreateLoad(ValuesPtr), Type::getInt8PtrTy(C)), AllocSize };
+      Value * NewValuesPtr = UpB.CreateCall(ReallocF, ReallocArgs);
+      
+      UpB.CreateStore(UpB.CreatePointerCast(NewValuesPtr, getObjPtrTy(C)->getPointerTo()),
+                      ValuesPtr);
+    }
+  
     UpB.CreateRetVoid();
   }
   
@@ -255,8 +258,8 @@ void Insert(Value *Key, Value *Val, Module *M, IRBuilder<> &B)
     // if (arr->size > arr->max_size || arr->max_size == 0) {
     //   upsize(arr);
     // }
-    Value *SizePtr = IB.CreateStructGEP(BucketPtr, BucketFieldSize);
-    Value *MaxSizePtr = IB.CreateStructGEP(BucketPtr, BucketFieldMaxSize);
+    Value *SizePtr = IB.CreateStructGEP(BucketType(C), BucketPtr, BucketFieldSize);
+    Value *MaxSizePtr = IB.CreateStructGEP(BucketType(C), BucketPtr, BucketFieldMaxSize);
     
     Value *Cond1 = IB.CreateICmpSGT(IB.CreateLoad(SizePtr), IB.CreateLoad(MaxSizePtr));
     Value *Cond2 = IB.CreateICmpEQ(IB.CreateLoad(MaxSizePtr), IB.getInt32(0));
@@ -281,14 +284,14 @@ void Insert(Value *Key, Value *Val, Module *M, IRBuilder<> &B)
     // int size = strlen(key) + 1;
     // arr->keys[arr->size] = (char *)malloc(size);
     // memcpy(arr->keys[arr->size], key, size);
-    Value *KeysPtr = MCB.CreateStructGEP(BucketPtr, BucketFieldKeys); // |KeysPtr| : i8***
+    Value *KeysPtr = MCB.CreateStructGEP(BucketType(C), BucketPtr, BucketFieldKeys); // |KeysPtr| : i8***
     Value *KeyPtr = MCB.CreateGEP(MCB.CreateLoad(KeysPtr), Size); // |KeyPtr| : i8**
     MCB.CreateStore(KArg, KeyPtr);
     
     // size = strlen(value) + 1;
     // arr->values[arr->size] = (%obj *)malloc(size);
     // memcpy(arr->values[arr->size], value, size);
-    Value *ValuesPtr = MCB.CreateStructGEP(BucketPtr, BucketFieldValues); // |ValuesPtr| : %obj***
+    Value *ValuesPtr = MCB.CreateStructGEP(BucketType(C), BucketPtr, BucketFieldValues); // |ValuesPtr| : %obj***
     Value *ValuePtr = MCB.CreateGEP(MCB.CreateLoad(ValuesPtr), Size); // |ValuePtr| : %obj**
     MCB.CreateStore(VArg, ValuePtr);
     
@@ -300,7 +303,7 @@ void Insert(Value *Key, Value *Val, Module *M, IRBuilder<> &B)
   }
   
   // Call insert function
-  B.CreateCall2(InsertF, Key, Val);
+  B.CreateCall(InsertF, ArrayRef<Value *>{ Key, Val });
 }
 
 // %obj* @getptr(i8* %key)
@@ -347,7 +350,7 @@ Value * GetPtr(Value *Key, Module *M, IRBuilder<> &B)
     Value *MapPtr = GetB.CreatePointerCast(__Map,
                                            BucketType(C)->getPointerTo());
     Value *BucketPtr = GetB.CreateGEP(MapPtr, HashV);
-    Value *SizePtr = GetB.CreateStructGEP(BucketPtr, BucketFieldSize);
+    Value *SizePtr = GetB.CreateStructGEP(BucketType(C), BucketPtr, BucketFieldSize);
     
     Value *CounterPtr = GetB.CreateAlloca(Type::getInt32Ty(C));
     CounterPtr->setName("counterPtr");
@@ -401,7 +404,7 @@ Value * GetPtr(Value *Key, Module *M, IRBuilder<> &B)
     // if (strcmp(s, key) == 0)
     //   return arr->values[i];
     
-    Value *KeysPtr = Loop2B.CreateStructGEP(BucketPtr, BucketFieldKeys); // |KeysPtr| : i8***
+    Value *KeysPtr = Loop2B.CreateStructGEP(BucketType(C), BucketPtr, BucketFieldKeys); // |KeysPtr| : i8***
     Value *KeyPtr = Loop2B.CreateGEP(Loop2B.CreateLoad(KeysPtr),
                                      Counter); // |KeyPtr| : i8**
     
@@ -410,7 +413,7 @@ Value * GetPtr(Value *Key, Module *M, IRBuilder<> &B)
     FunctionType *StrcmpTy = FunctionType::get(Type::getInt32Ty(C), StrcmpArgs, false);
     Function *StrcmpF = cast<Function>(M->getOrInsertFunction("strcmp", StrcmpTy));
     
-    Value *Ret = Loop2B.CreateCall2(StrcmpF, Loop2B.CreateLoad(KeyPtr), KArg);
+    Value *Ret = Loop2B.CreateCall(StrcmpF, ArrayRef<Value *>{ Loop2B.CreateLoad(KeyPtr), KArg });
     Value *Res = Loop2B.CreateICmpEQ(Ret, Loop2B.getInt32(0));
     Loop2B.CreateCondBr(Res, RetValueBB, Loop3BB);
     
@@ -428,7 +431,7 @@ Value * GetPtr(Value *Key, Module *M, IRBuilder<> &B)
     IRBuilder<> RVB(RetValueBB);
     GetB.SetInsertPoint(RetValueBB);
     
-    Value *ValuesPtr = RVB.CreateStructGEP(BucketPtr, BucketFieldValues); // |ValuesPtr| : %obj***
+    Value *ValuesPtr = RVB.CreateStructGEP(BucketType(C), BucketPtr, BucketFieldValues); // |ValuesPtr| : %obj***
     Value *ValuePtr = RVB.CreateGEP(RVB.CreateLoad(ValuesPtr),
                                     Counter); // |ValuePtr| : %obj**
     RVB.CreateRet(RVB.CreateLoad(ValuePtr));
@@ -504,7 +507,7 @@ void InsertOrUpdate(Value *Key, Value *Val, Module *M, IRBuilder<> &B)
   }
   
   // Call "insertorupdate" function
-  B.CreateCall2(InsOrUpF, Key, Val);
+  B.CreateCall(InsOrUpF, ArrayRef<Value *>{ Key, Val });
 }
 
 // %obj* @getptrorinsert(i8* %key)
@@ -544,17 +547,17 @@ Value * GetPtrOrInsert(Value *Key, Module *M, IRBuilder<> &B)
     
     // i8* @malloc(i64)
     FunctionType *MallocTy = FunctionType::get(Type::getInt8PtrTy(C),
-                                               (Type *[]) { Type::getInt64Ty(C) }, false);
+                                               ArrayRef<Type *>{ Type::getInt64Ty(C) }, false);
     Function *MallocF = cast<Function>(M->getOrInsertFunction("malloc", MallocTy));
     Value *AllocPtr = InsB.CreateCall(MallocF,
-                                    InsB.getInt64(ObjectTypeSize(C))); // |AllocPtr| : i8*
+                                      InsB.getInt64(ObjectTypeSize(C))); // |AllocPtr| : i8*
     Value *NewPtr = InsB.CreatePointerCast(AllocPtr, getObjPtrTy(C)); // |NewPtr| : %obj*
     
     // Init variable to zero
     InsB.CreateStore(InsB.getInt64(0),
-                     InsB.CreateStructGEP(NewPtr, ObjectFieldData));
+                     InsB.CreateStructGEP(getObjTy(C), NewPtr, ObjectFieldData));
     InsB.CreateStore(InsB.getInt1(ObjectTypeInteger),
-                     InsB.CreateStructGEP(NewPtr, ObjectFieldType));
+                     InsB.CreateStructGEP(getObjTy(C), NewPtr, ObjectFieldType));
     Insert(KArg, NewPtr, M, InsB);
     
     InsB.CreateRet(NewPtr);

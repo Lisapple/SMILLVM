@@ -1,13 +1,16 @@
 #include "ObjectType.h"
 
+#define kObjectFieldDataTy(C) Type::getInt64Ty(C)
+#define kObjectFieldTypeTy(C) Type::getInt1Ty(C)
+
 StructType * getObjTy(LLVMContext &C)
 {
   static StructType *Ty = NULL;
   if (!Ty) {
     /* struct obj { long int data; int type:1; }; */
     Ty = StructType::create("obj",
-                            Type::getInt64Ty(C),
-                            Type::getInt1Ty(C), NULL);
+                            kObjectFieldDataTy(C),
+                            kObjectFieldTypeTy(C), NULL);
   }
   return Ty;
 }
@@ -34,3 +37,6 @@ unsigned ObjectTypeSize(LLVMContext &C)
   }
   return Size;
 }
+
+#undef kObjectFieldTypeTy
+#undef kObjectFieldDataTy

@@ -58,12 +58,13 @@ Value * InitExpr::CodeGen(Module *M, IRBuilder<> &B)
   Value *RHSPtr = _RHS->CodeGen(M, B);
   Value *LHSPtr = _LHS->CodeGen(M, B);
   
-  /* LHS, RHS
-   * [LHS, !RHS]
-   * [!LHS, RHS]
-   * !LHS, !RHS
-   * LHS, Input
-   * [!LHS, Input]
+  /* Possible cases:
+   * LHS and RHS
+   * LHS and x(RHS) ("x" for inversed)
+   * x(LHS) and RHS
+   * x(LHS) and x(RHS)
+   * LHS and Input
+   * x(LHS) and Input
    */
   
   AssignableExpr *LHSVar = cast<AssignableExpr>(_LHS);
@@ -73,8 +74,8 @@ Value * InitExpr::CodeGen(Module *M, IRBuilder<> &B)
   if (LHSInversed &&
       (RHSisVar && cast<VarExpr>(_RHS)->getInversed())) { // x(LHS) && x(RHS)
     
-    Value *LHSDataPtr = B.CreateStructGEP(LHSPtr, ObjectFieldData);
-    Value *RHSDataPtr = B.CreateStructGEP(RHSPtr, ObjectFieldData);
+    Value *LHSDataPtr = B.CreateStructGEP(getObjTy(C), LHSPtr, ObjectFieldData);
+    Value *RHSDataPtr = B.CreateStructGEP(getObjTy(C), RHSPtr, ObjectFieldData);
     
     // Inversed: set |V| to zero if |int(V)| != 1 or if |str(V)| is a ptr != NULL
     Value *ResEQZ = B.CreateICmpEQ(B.CreateLoad(RHSDataPtr), B.getInt64(0));
@@ -84,7 +85,7 @@ Value * InitExpr::CodeGen(Module *M, IRBuilder<> &B)
     
     /* Update the index of the field used */
     B.CreateStore(B.getInt1(ObjectTypeInteger),
-                  B.CreateStructGEP(LHSPtr, ObjectFieldType));
+                  B.CreateStructGEP(getObjTy(C), LHSPtr, ObjectFieldType));
     
   } else if ((LHSInversed
               && ((RHSisVar && !cast<VarExpr>(_RHS)->getInversed())
@@ -93,8 +94,8 @@ Value * InitExpr::CodeGen(Module *M, IRBuilder<> &B)
                     && (RHSisVar && cast<VarExpr>(_RHS)->getInversed()))
              ) { // ( ( x(LHS) && ( RHS || Input ) ) || ( LHS && x(RHS) ) )
     
-    Value *LHSDataPtr = B.CreateStructGEP(LHSPtr, ObjectFieldData);
-    Value *RHSDataPtr = B.CreateStructGEP(RHSPtr, ObjectFieldData);
+    Value *LHSDataPtr = B.CreateStructGEP(getObjTy(C), LHSPtr, ObjectFieldData);
+    Value *RHSDataPtr = B.CreateStructGEP(getObjTy(C), RHSPtr, ObjectFieldData);
     
     // Inversed: set |V| to zero if |int(V)| != 1 or if |str(V)| is a ptr != NULL
     Value *ResEQZ = B.CreateICmpEQ(B.CreateLoad(RHSDataPtr), B.getInt64(0));
@@ -104,16 +105,16 @@ Value * InitExpr::CodeGen(Module *M, IRBuilder<> &B)
     
     // Update the index of the field used
     B.CreateStore(B.getInt1(ObjectTypeInteger),
-                  B.CreateStructGEP(LHSPtr, ObjectFieldType));
+                  B.CreateStructGEP(getObjTy(C), LHSPtr, ObjectFieldType));
     
   } else {
-    Value *RHSDataPtr = B.CreateStructGEP(RHSPtr, ObjectFieldData);
+    Value *RHSDataPtr = B.CreateStructGEP(getObjTy(C), RHSPtr, ObjectFieldData);
     B.CreateStore(B.CreateLoad(RHSDataPtr),
-                  B.CreateStructGEP(LHSPtr, ObjectFieldData));
+                  B.CreateStructGEP(getObjTy(C), LHSPtr, ObjectFieldData));
     
-    Value *RHSTypePtr = B.CreateStructGEP(RHSPtr, ObjectFieldType);
+    Value *RHSTypePtr = B.CreateStructGEP(getObjTy(C), RHSPtr, ObjectFieldType);
     B.CreateStore(B.CreateLoad(RHSTypePtr),
-                  B.CreateStructGEP(LHSPtr, ObjectFieldType));
+                  B.CreateStructGEP(getObjTy(C), LHSPtr, ObjectFieldType));
   }
   
   return LHSPtr;
@@ -135,17 +136,17 @@ Value * BinOpExpr::CodeGen(Module *M, IRBuilder<> &B)
   }
   
   Value *LHSV = _LHS->CodeGen(M, B);
-  Value *LHSFieldPtr = B.CreateStructGEP(LHSV, ObjectFieldType);
+  Value *LHSFieldPtr = B.CreateStructGEP(getObjTy(C), LHSV, ObjectFieldType);
   Value *LHSisInt = B.CreateICmpEQ(B.CreateLoad(LHSFieldPtr),
                                    B.getInt1(ObjectTypeInteger));
-  Value *LHSDataPtr = B.CreateStructGEP(LHSV, ObjectFieldData);
+  Value *LHSDataPtr = B.CreateStructGEP(getObjTy(C), LHSV, ObjectFieldData);
   LHSDataPtr->setName("LHSDataPtr");
   
   Value *RHSV = _RHS->CodeGen(M, B);
-  Value *RHSFieldPtr = B.CreateStructGEP(RHSV, ObjectFieldType);
+  Value *RHSFieldPtr = B.CreateStructGEP(getObjTy(C), RHSV, ObjectFieldType);
   Value *RHSisInt = B.CreateICmpEQ(B.CreateLoad(RHSFieldPtr),
                                    B.getInt1(ObjectTypeInteger));
-  Value *RHSDataPtr = B.CreateStructGEP(RHSV, ObjectFieldData);
+  Value *RHSDataPtr = B.CreateStructGEP(getObjTy(C), RHSV, ObjectFieldData);
   LHSDataPtr->setName("RHSDataPtr");
   
   Value *ObjPtr = B.CreateAlloca(getObjTy(C));
@@ -176,10 +177,10 @@ Value * BinOpExpr::CodeGen(Module *M, IRBuilder<> &B)
                                    IntB.CreateLoad(RHSDataPtr));
   
   IntB.CreateStore(Result,
-                   IntB.CreateStructGEP(ObjPtr, ObjectFieldData));
+                   IntB.CreateStructGEP(getObjTy(C), ObjPtr, ObjectFieldData));
   
   IntB.CreateStore(IntB.getInt1(ObjectTypeInteger),
-                   IntB.CreateStructGEP(ObjPtr, ObjectFieldType));
+                   IntB.CreateStructGEP(getObjTy(C), ObjPtr, ObjectFieldType));
   
   BasicBlock *EndBB = BasicBlock::Create(C, "EndBlock", F);
   IntB.CreateBr(EndBB);
@@ -189,7 +190,7 @@ Value * BinOpExpr::CodeGen(Module *M, IRBuilder<> &B)
   B.SetInsertPoint(StrBB);
   
   StrB.CreateStore(StrB.getInt1(ObjectTypeString),
-                   StrB.CreateStructGEP(ObjPtr, ObjectFieldType));
+                   StrB.CreateStructGEP(getObjTy(C), ObjPtr, ObjectFieldType));
   
   // const char *sOutput = [...];
   // const char *sInput1 = [...];
@@ -256,10 +257,9 @@ Value * BinOpExpr::CodeGen(Module *M, IRBuilder<> &B)
     
     Value *LHSSize = LHSisIntB.getInt32(20 /* = log10(2^64) */ + 1);
     Value *LHSStrPtr = LHSisIntB.CreateAlloca(Type::getInt8Ty(C), LHSSize);
-    LHSisIntB.CreateCall3(SprintfF,
-                          LHSStrPtr,
-                          CastToCStr(GSprintfFormat, LHSisIntB),
-                          LHSisIntB.CreateLoad(LHSDataPtr));
+    Value* SprintfParams[] = {
+        LHSStrPtr, CastToCStr(GSprintfFormat, LHSisIntB), LHSisIntB.CreateLoad(LHSDataPtr) };
+    LHSisIntB.CreateCall(SprintfF, SprintfParams);
     LHSisIntB.CreateStore(LHSStrPtr, LHSPtrPtr);
     
     LHSisIntB.CreateBr(LHSDoneBB);
@@ -297,10 +297,9 @@ Value * BinOpExpr::CodeGen(Module *M, IRBuilder<> &B)
     // Convert RHS from int to str (to concat)
     Value *RHSSize = RHSisIntB.getInt32(20 /* = log10(2^64) */ + 1);
     Value *RHSStrPtr = RHSisIntB.CreateAlloca(Type::getInt8Ty(C), RHSSize);
-    RHSisIntB.CreateCall3(SprintfF,
-                          RHSStrPtr,
-                          CastToCStr(GSprintfFormat, LHSisIntB),
-                          RHSisIntB.CreateLoad(RHSDataPtr));
+    Value* SprintfParams2[] = {
+        RHSStrPtr, CastToCStr(GSprintfFormat, LHSisIntB), RHSisIntB.CreateLoad(RHSDataPtr) };
+    RHSisIntB.CreateCall(SprintfF, SprintfParams2);
     RHSisIntB.CreateStore(RHSStrPtr, RHSPtrPtr);
     
     RHSisIntB.CreateBr(RHSDoneBB);
@@ -340,11 +339,11 @@ Value * BinOpExpr::CodeGen(Module *M, IRBuilder<> &B)
     
     // Set '\0' to the buffer string |StrPtr| (only at [0] to get an empty string)
     DoneB.CreateMemSet(StrPtr, DoneB.getInt8(0), DoneB.getInt64(1), 8);
-    DoneB.CreateCall2(StrcatF, StrPtr, LHSPtrV);
-    DoneB.CreateCall2(StrcatF, StrPtr, RHSPtrV);
+    DoneB.CreateCall(StrcatF, ArrayRef<Value *>{ StrPtr, LHSPtrV });
+    DoneB.CreateCall(StrcatF, ArrayRef<Value *>{ StrPtr, RHSPtrV });
     
     DoneB.CreateStore(DoneB.CreatePtrToInt(StrPtr, Type::getInt64Ty(C)),
-                      DoneB.CreateStructGEP(ObjPtr, ObjectFieldData));
+                      DoneB.CreateStructGEP(getObjTy(C), ObjPtr, ObjectFieldData));
     DoneB.CreateBr(EndBB);
   }
   else if (_op == tok_sub) { // string and (string or integer)
@@ -389,10 +388,11 @@ Value * BinOpExpr::CodeGen(Module *M, IRBuilder<> &B)
     Value *Size = SIB.CreateAdd(Length, SIB.getInt64(1));
     Value *StrPtr = SIB.CreateAlloca(Type::getInt8Ty(C), Size);
     SIB.CreateMemSet(StrPtr, SIB.getInt8(0), Size, 8);
-    SIB.CreateCall3(StrncpyF, StrPtr, StrV, Length);
+    Value* StrncpyParams[] = { StrPtr, StrV, Length };
+    SIB.CreateCall(StrncpyF, StrncpyParams);
     
     SIB.CreateStore(SIB.CreatePtrToInt(StrPtr, Type::getInt64Ty(C)),
-                    SIB.CreateStructGEP(ObjPtr, ObjectFieldData));
+                    SIB.CreateStructGEP(getObjTy(C), ObjPtr, ObjectFieldData));
     
     SIB.CreateBr(DoneBB);
     
@@ -406,7 +406,7 @@ Value * BinOpExpr::CodeGen(Module *M, IRBuilder<> &B)
                                               Type::getInt64Ty(C)->getPointerTo()),
                            M, SSB);
     SSB.CreateStore(SSB.CreatePtrToInt(RetPtr, Type::getInt64Ty(C)),
-                    SSB.CreateStructGEP(ObjPtr, ObjectFieldData));
+                    SSB.CreateStructGEP(getObjTy(C), ObjPtr, ObjectFieldData));
     
     SSB.CreateBr(DoneBB);
     
@@ -485,9 +485,10 @@ Value * BinOpExpr::CodeGen(Module *M, IRBuilder<> &B)
       
       Value *OffsetV = LoopB.CreateAdd(LoopB.CreatePtrToInt(StrPtr, Type::getInt64Ty(C)),
                                        LoopB.CreateMul(CounterPHI, StrLen));
-      LoopB.CreateCall2(StrcpyF,
-                        LoopB.CreateIntToPtr(OffsetV, Type::getInt8PtrTy(C)),
-                        LoopB.CreatePointerCast(StrV, Type::getInt8PtrTy(C)));
+      Value* StrcpyParams[] = {
+        LoopB.CreateIntToPtr(OffsetV, Type::getInt8PtrTy(C)),
+        LoopB.CreatePointerCast(StrV, Type::getInt8PtrTy(C)) };
+      LoopB.CreateCall(StrcpyF, StrcpyParams);
       
       Value *NextCounter = LoopB.CreateAdd(CounterPHI, LoopB.getInt64(1));
       NextCounter->setName("nextCounter");
@@ -500,7 +501,7 @@ Value * BinOpExpr::CodeGen(Module *M, IRBuilder<> &B)
       IRBuilder<> DoneB(DoneBB);
       
       VTB.CreateStore(VTB.CreatePtrToInt(StrPtr, Type::getInt64Ty(C)),
-                      VTB.CreateStructGEP(ObjPtr, ObjectFieldData));
+                      VTB.CreateStructGEP(getObjTy(C), ObjPtr, ObjectFieldData));
       
       DoneB.CreateBr(EndBB);
     }
@@ -526,10 +527,11 @@ Value * BinOpExpr::CodeGen(Module *M, IRBuilder<> &B)
       Value *Size = VTB.CreateAdd(Length, VTB.getInt64(1));
       Value *StrPtr = VTB.CreateAlloca(Type::getInt8Ty(C), Size);
       VTB.CreateMemSet(StrPtr, VTB.getInt8(0), Size, 8);
-      VTB.CreateCall3(StrncpyF, StrPtr, StrV, Length);
+      Value* StrncpyParams[] = { StrPtr, StrV, Length };
+      VTB.CreateCall(StrncpyF, StrncpyParams);
       
       VTB.CreateStore(VTB.CreatePtrToInt(StrPtr, Type::getInt64Ty(C)),
-                      VTB.CreateStructGEP(ObjPtr, ObjectFieldData));
+                      VTB.CreateStructGEP(getObjTy(C), ObjPtr, ObjectFieldData));
       
       VTB.CreateBr(EndBB);
     }
@@ -566,7 +568,7 @@ Value * BinOpExpr::CodeGen(Module *M, IRBuilder<> &B)
              OffsetV,
              M, VTB);
       VTB.CreateStore(VTB.CreatePtrToInt(StrPtr, Type::getInt64Ty(C)),
-                      VTB.CreateStructGEP(ObjPtr, ObjectFieldData));
+                      VTB.CreateStructGEP(getObjTy(C), ObjPtr, ObjectFieldData));
       
       VTB.CreateBr(EndBB);
     }
@@ -589,11 +591,12 @@ Value * PrintExpr::CodeGen(Module *M, IRBuilder<> &B)
   for (vector<Expr *>::iterator it = output.begin(); it != output.end(); it++) {
     argsF.push_back(getObjPtrTy(C));
   }
-  // void @printN(%obj* [, %obj*]+)
+  // @TODO: Add Attribute::NonNull for each arg
+  // void @printN(%obj* [, %obj*]+) , ex: "void @print2(%obj*, %obj*)"
   ArrayRef<Type *> ArgsRef = ArrayRef<Type *>(argsF);
   FunctionType *PrintTy = FunctionType::get(Type::getVoidTy(C), ArgsRef, false);
   
-  // Generate the function name
+  // Generate the function name ("print[numberOfObjectsAsArgs]")
   ostringstream ostr;
   ostr << "print" << (output.end() - output.begin());
   Function *PrintF = cast<Function>(M->getOrInsertFunction(ostr.str(), PrintTy));
@@ -630,7 +633,7 @@ Value * PrintExpr::CodeGen(Module *M, IRBuilder<> &B)
     for (Function::arg_iterator it = PrintF->arg_begin(); it != PrintF->arg_end(); it++) {
       
       Value *Arg = it;
-      Value *FieldPtr = FB.CreateStructGEP(Arg, ObjectFieldType);
+      Value *FieldPtr = FB.CreateStructGEP(getObjTy(C), Arg, ObjectFieldType);
       Value *CompResult = FB.CreateICmpEQ(FB.CreateLoad(FieldPtr),
                                           FB.getInt1(ObjectTypeString));
       Value *ArgFormat = FB.CreateSelect(CompResult,
@@ -640,7 +643,7 @@ Value * PrintExpr::CodeGen(Module *M, IRBuilder<> &B)
       Value* Params[] = { FormatPtr, ArgFormat };
       FB.CreateCall(StrcatF, Params);
       
-      Value *DataPtr = FB.CreateStructGEP(Arg, ObjectFieldData);
+      Value *DataPtr = FB.CreateStructGEP(getObjTy(C), Arg, ObjectFieldData);
       printfParams.push_back(FB.CreateLoad(DataPtr));
     }
     
@@ -686,22 +689,22 @@ Value * HelloPrintExpr::CodeGen(Module *M, IRBuilder<> &B)
   Value *Input = InputAtIndex(0, M, B);
   if (Input) {
     
-    Value *FieldPtr = B.CreateStructGEP(Input, ObjectFieldType);
+    Value *FieldPtr = B.CreateStructGEP(getObjTy(C), Input, ObjectFieldType);
     Value *CompResult = B.CreateICmpEQ(B.CreateLoad(FieldPtr),
                                        B.getInt1(ObjectTypeString));
     Value *ArgFormat = B.CreateSelect(CompResult,
                                       CastToCStr(GStrArgHelloFormat, B),
                                       CastToCStr(GIntArgHelloFormat, B),
                                       "printf.format.arg");
-    B.CreateCall2(PrintfF, ArgFormat, B.CreateLoad(Input));
+    Value* PrintfParams[] = { ArgFormat, B.CreateLoad(Input) };
+    B.CreateCall(PrintfF, PrintfParams);
     
   } else {
     static Value *GHelloWorld = NULL;
     if (!GHelloWorld) GHelloWorld = B.CreateGlobalString("world", "hello.world");
-    
-    B.CreateCall2(PrintfF,
-                  CastToCStr(GStrArgHelloFormat, B),
-                  CastToCStr(GHelloWorld, B));
+	  
+    Value* PrintfParams[] = { CastToCStr(GStrArgHelloFormat, B), CastToCStr(GHelloWorld, B) };
+    B.CreateCall(PrintfF, PrintfParams);
   }
   
   return NULL;
@@ -908,9 +911,9 @@ Value * LengthFuncExpr::CodeGen(Module *M, IRBuilder<> &B)
   
   Value *NewPtr = B.CreateAlloca(getObjTy(C));
   B.CreateStore(Strlen(Str, M, B),
-                B.CreateStructGEP(NewPtr, ObjectFieldData));
+                B.CreateStructGEP(getObjTy(C), NewPtr, ObjectFieldData));
   B.CreateStore(B.getInt1(ObjectTypeInteger),
-                B.CreateStructGEP(NewPtr, ObjectFieldType));
+                B.CreateStructGEP(getObjTy(C), NewPtr, ObjectFieldType));
   return NewPtr;
 }
 

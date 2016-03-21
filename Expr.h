@@ -48,9 +48,7 @@ typedef enum {
 /**/ static inline bool classof(const Expr *E) { \
 /*   */ return (E->ClassName() == CLASSNAME); }
 
-#define MAX(A, B) ( { __typeof__(A) _A = (A); \
-/*                 */ __typeof__(B) _B = (B); \
-/*                 */ _A > _B ? _A : _B; })
+#define MAX(A, B) ( (A) > (B) ? (A) : (B) )
 
 /*** Expression ***/
 class Expr {
@@ -68,6 +66,8 @@ public:
   
   void Debug() { out() << DebugString() << endl; }
   virtual string DebugString() = 0;
+  
+  virtual ~Expr() {};
 };
 
 /*** Wrapper for Token Expression ***/
@@ -83,6 +83,8 @@ public:
   Value * CodeGen(Module *M, IRBuilder<> &B);
   
   string DebugString();
+  
+  ~TokenExpr() {};
 };
 
 /*** Comment Expression ***/
@@ -98,6 +100,8 @@ public:
   Value * CodeGen(Module *M, IRBuilder<> &B);
   
   string DebugString();
+  
+  ~CommentExpr() {};
 };
 
 /*** Input Expression ***/
@@ -117,6 +121,8 @@ public:
   Value * CodeGen(Module *M, IRBuilder<> &B);
   
   string DebugString();
+  
+  ~InputExpr() {};
 };
 
 /*** Base Class for Variables ***/
@@ -134,6 +140,8 @@ public:
   
   virtual string getName() const = 0;
   virtual bool getInversed() const  = 0;
+  
+  ~AssignableExpr() {};
 };
 
 /*** Variable Expression ***/
@@ -153,6 +161,8 @@ public:
   bool getInversed() const { return _inversed; }
   
   string DebugString();
+  
+  ~VarExpr() {};
 };
 
 /*** Named Variable Expression ***/
@@ -171,6 +181,8 @@ public:
   bool getInversed() const { return false; }
   
   string DebugString();
+  
+  ~NamedVarExpr() {};
 };
 
 /*** Initialisation Expression ***/
@@ -186,6 +198,8 @@ public:
   Value * CodeGen(Module *M, IRBuilder<> &B);
   
   string DebugString();
+  
+  ~InitExpr() {};
 };
 
 /*** Binary Operator Expression ***/
@@ -202,6 +216,8 @@ public:
   Value * CodeGen(Module *M, IRBuilder<> &B);
   
   string DebugString();
+  
+  ~BinOpExpr() {};
 };
 
 /*** Print Expression ***/
@@ -217,6 +233,8 @@ public:
   Value * CodeGen(Module *M, IRBuilder<> &B);
   
   string DebugString();
+  
+  ~PrintExpr() {};
 };
 
 /*** Hello Print Expression ***/
@@ -230,6 +248,8 @@ public:
   Value * CodeGen(Module *M, IRBuilder<> &B);
   
   string DebugString();
+  
+  ~HelloPrintExpr() {};
 };
 
 /*** No Operation Expression ***/
@@ -242,6 +262,8 @@ public:
   Value * CodeGen(Module *M, IRBuilder<> &B);
   
   string DebugString();
+  
+  ~NopExpr() {};
 };
 
 /*** Exit (terminate) Expression ***/
@@ -257,6 +279,8 @@ public:
   Value * CodeGen(Module *M, IRBuilder<> &B);
   
   string DebugString();
+  
+  ~ExitExpr() {};
 };
 
 /*** Push (to global stack) Expression ***/
@@ -272,6 +296,8 @@ public:
   Value * CodeGen(Module *M, IRBuilder<> &B);
   
   string DebugString();
+  
+  ~PushExpr() {};
 };
 
 /*** Pop (from global stack) Expression ***/
@@ -287,6 +313,8 @@ public:
   Value * CodeGen(Module *M, IRBuilder<> &B);
   
   string DebugString();
+  
+  ~PopExpr() {};
 };
 
 /*** Clear Global Stack Expression ***/
@@ -299,6 +327,8 @@ public:
   Value * CodeGen(Module *M, IRBuilder<> &B);
   
   string DebugString();
+  
+  ~ClearExpr() {};
 };
 
 /*** Loop Expression ***/
@@ -317,6 +347,8 @@ public:
   Value * CodeGen(Module *M, IRBuilder<> &B);
   
   string DebugString();
+  
+  ~LoopExpr() {};
 };
 
 /*** Unkown Expression ***/
@@ -332,6 +364,8 @@ public:
   Value * CodeGen(Module *M, IRBuilder<> &B);
   
   string DebugString();
+  
+  ~LengthFuncExpr() {};
 };
 
 /*** Unkown Expression ***/
@@ -348,6 +382,8 @@ public:
   Value * CodeGen(Module *M, IRBuilder<> &B);
   
   string DebugString();
+  
+  ~UnkownExpr() {};
 };
 
 #endif // SMIL_EXPR_H

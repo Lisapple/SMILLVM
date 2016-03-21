@@ -44,10 +44,12 @@ void CreateAssert(Value *CondV, Value *ErrMsgV, Module *M, IRBuilder<> &B, int l
   Type* Args[] = { Type::getInt8PtrTy(C) };
   FunctionType *FuncTy = FunctionType::get(Type::getInt32Ty(C), Args, true);
   Function *PrintfF = cast<Function>(M->getOrInsertFunction("printf", FuncTy));
-  TB.CreateCall4(PrintfF,
-                 CastToCStr(GAssertDefaultFormat, TB),
-                 TB.getInt32(line), TB.getInt32(col),
-                 CastToCStr(ErrMsgV, TB));
+  Value* PrintfArgs[] = {
+    CastToCStr(GAssertDefaultFormat, TB),
+    TB.getInt32(line), TB.getInt32(col),
+    CastToCStr(ErrMsgV, TB)
+  };
+  TB.CreateCall(PrintfF, PrintfArgs);
   
   if (shouldExit) {
     Function *ExitF = cast<Function>(M->getOrInsertFunction("exit", Type::getVoidTy(C),
@@ -77,10 +79,12 @@ void CreateWarning(Value *WarningMsgV, Module *M, IRBuilder<> &B, int line, int 
   Type* Args[] = { Type::getInt8PtrTy(C) };
   FunctionType *FuncTy = FunctionType::get(Type::getInt32Ty(C), Args, true);
   Function *PrintfF = cast<Function>(M->getOrInsertFunction("printf", FuncTy));
-  B.CreateCall4(PrintfF,
-                CastToCStr(GWarningDefaultFormat, B),
-                B.getInt32(line), B.getInt32(col),
-                CastToCStr(WarningMsgV, B));
+  Value* PrintfArgs[] = {
+    CastToCStr(GWarningDefaultFormat, B),
+    B.getInt32(line), B.getInt32(col),
+    CastToCStr(WarningMsgV, B)
+  };
+  B.CreateCall(PrintfF, PrintfArgs);
   
   if (shouldExit) {
     Function *ExitF = cast<Function>(M->getOrInsertFunction("exit", Type::getVoidTy(C),
@@ -198,23 +202,28 @@ Value * Strxch(Value *StrV, Value *Occurence, Module *M, IRBuilder<> &B)
   LoopB.CreateStore(LoopB.CreateLoad(OutputPtr), OldPtr);
   
   // outputPtr = strstr(outputPtr, occurence);
-  Value *Ptr = LoopB.CreateCall2(StrstrF,
-                                 LoopB.CreateIntToPtr(LoopB.CreateLoad(OutputPtr),
-                                                      Type::getInt8PtrTy(C)),
-                                 CastToCStr(Occurence, LoopB));
+  Value* StrstrArgs2[] = {
+    LoopB.CreateIntToPtr(LoopB.CreateLoad(OutputPtr), Type::getInt8PtrTy(C)),
+    CastToCStr(Occurence, LoopB)
+  };
+  Value *Ptr = LoopB.CreateCall(StrstrF, StrstrArgs2);
   Value *IntPtr = LoopB.CreatePtrToInt(Ptr, Type::getInt64Ty(C));
   LoopB.CreateStore(IntPtr, OutputPtr);
   
-  // strncat(soutput, oldOutputPtr, (outputPtr) ? (outputPtr-oldOutputPtr) : strlen(s));
-  LoopB.CreateCall3(StrncatF,
-                    CastToCStr(Output, LoopB),
-                    LoopB.CreateIntToPtr(LoopB.CreateLoad(OldPtr),
-                                         Type::getInt8PtrTy(C)),
-                    LoopB.CreateSelect(LoopB.CreateICmpEQ(IntPtr,
-                                                          LoopB.getInt64(0)),
-                                       StrLen,
-                                       LoopB.CreateSub(LoopB.CreateLoad(OutputPtr),
-                                                       LoopB.CreateLoad(OldPtr))));
+  {
+    // strncat(soutput, oldOutputPtr, (outputPtr) ? (outputPtr-oldOutputPtr) : strlen(s));
+    Value* StrncatArgs[] = {
+      CastToCStr(Output, LoopB),
+      LoopB.CreateIntToPtr(LoopB.CreateLoad(OldPtr),
+                           Type::getInt8PtrTy(C)),
+      LoopB.CreateSelect(LoopB.CreateICmpEQ(IntPtr,
+                                            LoopB.getInt64(0)),
+                         StrLen,
+                         LoopB.CreateSub(LoopB.CreateLoad(OutputPtr),
+                                         LoopB.CreateLoad(OldPtr)))
+    };
+    LoopB.CreateCall(StrncatF, StrncatArgs);
+  }
   
   // outputPtr += occLen;
   Value *Offset = LoopB.CreateAdd(B.CreateLoad(OutputPtr), OccLen);
@@ -250,8 +259,8 @@ Value * ObjToStr(Value *Obj, Module *M, IRBuilder<> &B)
   // @TODO: Create a function "@otos"
   LLVMContext &C = M->getContext();
   
-  Value *TypePtr = B.CreateStructGEP(Obj, ObjectFieldType);
-  Value *DataPtr = B.CreateStructGEP(Obj, ObjectFieldData);
+  Value *TypePtr = B.CreateStructGEP(getObjTy(C), Obj, ObjectFieldType);
+  Value *DataPtr = B.CreateStructGEP(getObjTy(C), Obj, ObjectFieldData);
   
   Value *CompResult = B.CreateICmpEQ(B.CreateLoad(TypePtr),
                                      B.getInt1(ObjectTypeInteger));
@@ -280,10 +289,8 @@ Value * ObjToStr(Value *Obj, Module *M, IRBuilder<> &B)
     
     Value *Size = IntB.getInt32(20 /* = log10(2^64) */ + 1);
     StrPtr = IntB.CreateAlloca(Type::getInt8Ty(C), Size);
-    IntB.CreateCall3(SprintfF,
-                     StrPtr,
-                     CastToCStr(GSprintfFormat, IntB),
-                     IntB.CreateLoad(DataPtr));
+    Value* SprintfArgs2[] = { StrPtr, CastToCStr(GSprintfFormat, IntB), IntB.CreateLoad(DataPtr) };
+    IntB.CreateCall(SprintfF, SprintfArgs2);
   }
   IntB.CreateBr(DoneBB);
   
@@ -298,7 +305,7 @@ Value * ObjToStr(Value *Obj, Module *M, IRBuilder<> &B)
     
     // i8* @malloc(i64)
     FunctionType *MallocTy = FunctionType::get(Type::getInt8PtrTy(C),
-                                               (Type *[]) { Type::getInt64Ty(C) }, false);
+                                               ArrayRef<Type *>{ Type::getInt64Ty(C) }, false);
     Function *MallocF = cast<Function>(M->getOrInsertFunction("malloc", MallocTy));
     AllocPtr = StrB.CreateCall(MallocF, Size); // |AllocPtr| : i8*
     
@@ -306,8 +313,7 @@ Value * ObjToStr(Value *Obj, Module *M, IRBuilder<> &B)
     Type* StrcpyArgs[] = { Type::getInt8PtrTy(C), Type::getInt8PtrTy(C) };
     FunctionType *StrcpyTy = FunctionType::get(Type::getInt8PtrTy(C), StrcpyArgs, false /* not vararg */);
     Function *StrcpyF = cast<Function>(M->getOrInsertFunction("strcpy", StrcpyTy));
-    
-    StrB.CreateCall2(StrcpyF, AllocPtr, Str);
+    StrB.CreateCall(StrcpyF, ArrayRef<Value *>{ AllocPtr, Str });
   }
   StrB.CreateBr(DoneBB);
   
@@ -328,14 +334,14 @@ Value * ObjToInt64(Value *Obj, Module *M, IRBuilder<> &B)
   
   LLVMContext &C = M->getContext();
   Value *IntPtr = B.CreateAlloca(Type::getInt64Ty(C));
-  Value *Data = B.CreateLoad(B.CreateStructGEP(Obj, ObjectFieldData));
+  Value *Data = B.CreateLoad(B.CreateStructGEP(getObjTy(C), Obj, ObjectFieldData));
   
   Function *F = B.GetInsertBlock()->getParent();
   BasicBlock *IntBB = BasicBlock::Create(C, "Cast64.IntegerBlock", F);
   BasicBlock *StrBB = BasicBlock::Create(C, "Cast64.StringBlock", F);
   BasicBlock *DoneBB = BasicBlock::Create(C, "Cast64.DoneBlock", F);
   
-  Value *FieldPtr = B.CreateStructGEP(Obj, ObjectFieldType);
+  Value *FieldPtr = B.CreateStructGEP(getObjTy(C), Obj, ObjectFieldType);
   Value *CompResult = B.CreateICmpEQ(B.CreateLoad(FieldPtr),
                                      B.getInt1(ObjectTypeInteger));
   B.CreateCondBr(CompResult, IntBB, StrBB);
@@ -379,11 +385,8 @@ Value * ValToObj(Value *Val, Module *M, IRBuilder<> &B)
   // sscanf(s, "%lld%s", &d, &c)
   Value *PrtD = B.CreateAlloca(Type::getInt32Ty(C));
   Value *PrtC = B.CreateAlloca(Type::getInt8Ty(C));
-  Value *RetV = B.CreateCall4(SscanfF,
-                              CastToCStr(Val, B),
-                              CastToCStr(GFormat, B),
-                              CastToCStr(PrtD, B),
-                              CastToCStr(PrtC, B));
+  Value* SscanfArgs2[] = { CastToCStr(Val, B), CastToCStr(GFormat, B), CastToCStr(PrtD, B), CastToCStr(PrtC, B) };
+  Value *RetV = B.CreateCall(SscanfF, SscanfArgs2);
   
   /* The "sscanf" function returns "1" on only integer (|d| converted and not |c|) */
   Value *CompResult = B.CreateICmpEQ(RetV, B.getInt32(1));
@@ -402,12 +405,12 @@ Value * ValToObj(Value *Val, Module *M, IRBuilder<> &B)
   
   Value *IntV = StrToInt64(Val, M, IntB);
   
-  Value *IFPtr = IntB.CreateStructGEP(Ptr, ObjectFieldData);
+  Value *IFPtr = IntB.CreateStructGEP(getObjTy(C), Ptr, ObjectFieldData);
   IntB.CreateStore(IntV, IFPtr);
   
   /* Update the index of the field used */
   IntB.CreateStore(IntB.getInt1(ObjectTypeInteger),
-                   IntB.CreateStructGEP(Ptr, ObjectFieldType));
+                   IntB.CreateStructGEP(getObjTy(C), Ptr, ObjectFieldType));
   
   IntB.CreateBr(DoneBB);
   
@@ -415,7 +418,7 @@ Value * ValToObj(Value *Val, Module *M, IRBuilder<> &B)
   B.SetInsertPoint(StrBB);
   IRBuilder<> StrB(StrBB);
   
-  Value *CFPtr = StrB.CreateStructGEP(Ptr, ObjectFieldData);
+  Value *CFPtr = StrB.CreateStructGEP(getObjTy(C), Ptr, ObjectFieldData);
   
   Value *Length = Strlen(Val, M, StrB);
   Value *Size = StrB.CreateAdd(Length, StrB.getInt64(1));
@@ -428,7 +431,7 @@ Value * ValToObj(Value *Val, Module *M, IRBuilder<> &B)
   
   /* Update the index of the field used */
   StrB.CreateStore(StrB.getInt1(ObjectTypeString),
-                   StrB.CreateStructGEP(Ptr, ObjectFieldType));
+                   StrB.CreateStructGEP(getObjTy(C), Ptr, ObjectFieldType));
   
   StrB.CreateBr(DoneBB);
   

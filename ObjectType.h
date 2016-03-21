@@ -7,8 +7,8 @@
 using namespace llvm;
 
 enum ObjectField {
-  ObjectFieldData = 0, // String or Integer Field
-  ObjectFieldType // Type
+  ObjectFieldData = 0, // String or Integer Field (ptr: long int (Int64))
+  ObjectFieldType // Type (type: int:1 (ObjectType))
 };
 
 enum ObjectType {
