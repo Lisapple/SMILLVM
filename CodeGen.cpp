@@ -14,7 +14,8 @@ bool canGen(Expr *expr)
 {
   return (isa<InitExpr>(expr) || isa<PrintExpr>(expr) || isa<HelloPrintExpr>(expr) ||
           isa<ExitExpr>(expr) || isa<LoopExpr>(expr) ||
-          isa<PushExpr>(expr) || isa<PopExpr>(expr) || isa<ClearExpr>(expr));
+		  isa<PushExpr>(expr) || isa<PopExpr>(expr) || isa<ClearExpr>(expr) ||
+		  isa<NopExpr>(expr));
 }
 
 /*** Wrapper for token Expression ***/
@@ -713,11 +714,9 @@ Value * HelloPrintExpr::CodeGen(Module *M, IRBuilder<> &B)
 /*** No Operation Expression ***/
 Value * NopExpr::CodeGen(Module *M, IRBuilder<> &B)
 {
-  // @TODO: Use "@llvm.donothing":
-  /* Function *F = Intrinsic::getDeclaration(M, Intrinsic::donothing);
-   * InvokeInst::Create(F, II->getNormalDest(), II->getUnwindDest(), None, "", II->getParent());
-   */
-  
+  // Call @llvm.donothing() to do nothing, paka paka...
+  Function *NopF = Intrinsic::getDeclaration(M, Intrinsic::donothing);
+  B.CreateCall(NopF, ArrayRef<Value *>{});
   return NULL;
 }
 
